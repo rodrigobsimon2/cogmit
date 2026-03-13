@@ -1,0 +1,9 @@
+# Binary
+cogmit
+cogmit.exe
+
+# Environment
+.env
+
+# Go
+vendor/
