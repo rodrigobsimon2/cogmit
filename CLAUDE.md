@@ -9,35 +9,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Running
 
 ```bash
-npm start          # run directly with node
-node index.js      # equivalent
-cogmit             # if installed globally via npm link
+go run .           # run directly with Go
+cogmit             # if installed globally via go install
 ```
 
 Before running, ensure changes are staged:
 ```bash
 git add <files>
-node index.js
+cogmit
+```
+
+## Build & Install
+
+```bash
+go build -o cogmit.exe .   # build binary locally
+go install .               # install to $GOPATH/bin (makes `cogmit` available globally)
 ```
 
 ## Environment
 
 Requires a `.env` file in the project root with:
 - `OPENROUTER_API_KEY` — API key for OpenRouter
-- `AI_MODEL` — model slug (e.g. `deepseek/deepseek-chat-v3.1`)
+- `AI_MODEL` — model slug (e.g. `deepseek/deepseek-chat-v3.1`); defaults to `arcee-ai/trinity-large-preview:free`
 
 ## Architecture
 
-Single-file ESM script (`index.js`) with this flow:
+Go project with the following packages:
 
-1. **`getGitDiff()`** — runs `git diff --cached`, exits if nothing is staged
-2. **`getAiSummary(diff)`** — sends diff to OpenRouter API; the prompt requests a Markdown response with two sections: `### Resumo Técnico` and `### Mensagem de Commit`
-3. **`extractCommitMessage(aiResponse)`** — parses the AI response, first by looking for the markdown section, then by regex-matching a Conventional Commit pattern (`feat|fix|chore|...`)
-4. **`main()`** — orchestrates the above, shows the full AI response to the user, then uses `inquirer` to confirm before calling `simple-git` to execute the commit
+- **`main.go`** — entry point; orchestrates the full flow
+- **`/ai/openrouter.go`** — sends diff to OpenRouter API and extracts the commit message
+- **`/git/git.go`** — wrappers for `git diff --cached`, `git commit`, `git push`, repo root detection
+- **`/convention/convention.go`** — loads commit convention from `cogmit-convention.md` in repo root, or uses built-in default
+- **`/prompt/prompt.go`** — simple yes/no confirmation prompt via stdin
 
-## Key Dependencies
+### Flow
 
-- `simple-git` — executes the final `git.commit()`
-- `inquirer` — interactive confirmation prompt
-- `chalk` — colored terminal output
-- `dotenv` — loads `.env` from the script's own directory (not `process.cwd()`)
+1. Detect repo root via `git rev-parse --show-toplevel`
+2. Load convention rules (from `cogmit-convention.md` or built-in default)
+3. Get staged diff via `git diff --cached`; exit if nothing staged
+4. Call OpenRouter API; prompt requests sections `### Resumo Técnico` and `### Commit Message`
+5. Extract commit message (strategy 1: `### Commit Message` section; strategy 2: regex Conventional Commit pattern)
+6. Display AI response to user, prompt for confirmation (default: yes)
+7. Execute `git commit -m <message>`
+8. Prompt to push to remote (default: no)
